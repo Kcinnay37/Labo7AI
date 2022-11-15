@@ -25,6 +25,7 @@ class AI(Actor):
     initialVelo:pygame.math.Vector2
 
     destination:pygame.math.Vector2
+    otherDestination:pygame.math.Vector2 = []
     finalDestination:pygame.math.Vector2
 
     forwardPoint1:pygame.math.Vector2
@@ -53,6 +54,8 @@ class AI(Actor):
     machine:Machine
     states = []
 
+    dirTurn:str
+
     def __init__(self, tag:str, imagePath:str):
         super().__init__("tag")
 
@@ -73,6 +76,7 @@ class AI(Actor):
         self.img = self.defaultImg
 
         self.destination = pygame.math.Vector2(self.midPos)
+        self.otherDestination = []
         self.finalDestination = pygame.math.Vector2(self.midPos)
         self.isMoving = False
 
@@ -88,6 +92,8 @@ class AI(Actor):
         self.distMoveWander = 300
         self.wanderSet = False
         self.distFlee = 300
+
+        self.dirTurn = ""
 
         self.states.append(State("Seek", self.OnSeek, self.OnExit))
         self.states.append(State("Flee", self.OnFlee, self.OnExit))
@@ -119,6 +125,8 @@ class AI(Actor):
     def UpdateFinalDest(self, dest:float):
         self.finalDestination.x = int(dest[0] / 64) * 64 + 32
         self.finalDestination.y = int(dest[1] / 64) * 64 + 32
+        self.otherDestination.clear()
+        self.dirTurn = ""
 
     def UpdateDest(self, dest:float):
         self.destination.x = int(dest[0] / 64) * 64 + 32
@@ -215,7 +223,12 @@ class AI(Actor):
         if lengthAI >= self.lenghtDest:
             self.isMoving = False
             if self.destination != self.finalDestination:
-                self.UpdateDest(self.finalDestination)
+                if(len(self.otherDestination) > 0):
+                    self.UpdateDest(self.otherDestination[0])
+                    self.otherDestination.pop(0)
+                else:
+                    self.UpdateDest(self.finalDestination)
+                    #self.dirTurn = ""
                 self.SetTransition("Seek")
         else:
             self.isMoving = True
@@ -269,31 +282,33 @@ class AI(Actor):
             pygame.draw.line(screen, pygame.Color(255, 255, 255), self.midPos, self.destination, 5)
 
     def GoCelluleDir(self, dir:str, cellulePos):
+        self.otherDestination.clear()
+
         localX = int(self.midPos.x / 64)
         localY = int(self.midPos.y / 64)
 
         rightMove = \
         {
             "-1,-1": [0, -1],
-            "0,-1": [1, 0],
+            "0,-1": [1, 0, 1, -1],
             "1,-1": [1, 0],
-            "1,0": [0, 1],
+            "1,0": [0, 1, 1, 1],
             "1,1": [0, 1],
-            "0,1": [-1, 0],
+            "0,1": [-1, 0, -1, 1],
             "-1,1": [-1, 0],
-            "-1,0": [0, -1]
+            "-1,0": [0, -1, -1, -1]
         }
 
         leftMove = \
         {
             "-1,-1": [-1, 0],
-            "0,-1": [-1, 0],
+            "0,-1": [-1, 0, -1, -1],
             "1,-1": [0, -1],
-            "1,0": [0, -1],
+            "1,0": [0, -1, 1, -1],
             "1,1": [1, 0],
-            "0,1": [1, 0],
+            "0,1": [1, 0, 1, 1],
             "-1,1": [0, 1],
-            "-1,0": [0, 1]
+            "-1,0": [0, 1, -1, 1]
         }
 
         key:str = str(cellulePos[0] - localX) + ',' + str(cellulePos[1] - localY)
@@ -311,18 +326,29 @@ class AI(Actor):
         gridPosToGo[0] *= 64
         gridPosToGo[1] *= 64
 
-        self.UpdateDest(gridPosToGo)
+        if len(gridPosToGo) > 2:
+            gridPosToGo[2] += localX
+            gridPosToGo[3] += localY
+            gridPosToGo[2] *= 64
+            gridPosToGo[3] *= 64
+            self.otherDestination.append([gridPosToGo[2], gridPosToGo[3]])
+
+        self.UpdateDest([gridPosToGo[0], gridPosToGo[1]])
         self.SetTransition("Seek")
 
     def Update(self, dt:float):
         self.SetForwardPoint()
+
         cell = self.mapGame.CheckObstacle([self.forwardPoint1.x, self.forwardPoint1.y])
         if cell != None:
-            self.GoCelluleDir("left", cell)
-        else:
-            cell = self.mapGame.CheckObstacle([self.forwardPoint2.x, self.forwardPoint2.y])
-            if cell != None:
-                self.GoCelluleDir("right", cell)
+            if self.dirTurn == "":
+                self.dirTurn = "left"
+            self.GoCelluleDir(self.dirTurn, cell)
+        cell = self.mapGame.CheckObstacle([self.forwardPoint2.x, self.forwardPoint2.y])
+        if cell != None:
+            if self.dirTurn == "":
+                self.dirTurn = "right"
+            self.GoCelluleDir(self.dirTurn, cell)
 
         match(self.aiState):
             case "Seek":
