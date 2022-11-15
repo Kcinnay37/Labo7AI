@@ -43,13 +43,6 @@ class Game:
         self.map = Map("Map", "Image\\Map.tmx")
         self.engine.AddActor(self.map)
 
-
-        # self.apple = Apple("Apple", "Image\\Apple.png")
-        # self.engine.AddActor(self.apple)
-
-        # self.player = Player("Player", "Image\\hitman1_stand.png", "Image\\hitman1_gun.png")
-        # self.engine.AddActor(self.player)
-
         self.AI = AI("AI", "Image\\Zombi.png")
         self.AI.SetMap(self.map)
         self.engine.AddActor(self.AI)
@@ -73,10 +66,12 @@ class Game:
                 self.isRun = False
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if pygame.mouse.get_pressed()[0]:
+                    # update la destination final et la destination a aller
                     self.AI.UpdateFinalDest(pygame.mouse.get_pos())
                     self.AI.UpdateDest(pygame.mouse.get_pos())
                     self.AI.SetTransition("Seek")
                 if pygame.mouse.get_pressed()[2]:
+                    # ajoute un obstacle dans la map
                     self.map.AddObstacle(pygame.mouse.get_pos())
 
             if event.type == pygame.KEYDOWN:

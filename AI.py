@@ -16,6 +16,7 @@ class AI(Actor):
 
     pos:pygame.math.Vector2
     midPos:pygame.math.Vector2
+    localPos:pygame.math.Vector2
     size:pygame.math.Vector2
     angle:float
 
@@ -27,6 +28,7 @@ class AI(Actor):
     destination:pygame.math.Vector2
     otherDestination:pygame.math.Vector2 = []
     finalDestination:pygame.math.Vector2
+    posDuringRoute:pygame.math.Vector2 = []
 
     forwardPoint1:pygame.math.Vector2
     forwardPoint2:pygame.math.Vector2
@@ -64,6 +66,7 @@ class AI(Actor):
         self.size = pygame.math.Vector2(64, 64)
         self.pos = pygame.math.Vector2(0, 0)
         self.midPos = pygame.math.Vector2(self.pos + (self.size / 2))
+        self.localPos = pygame.math.Vector2(int(self.midPos.x / 64), int(self.midPos.y / 64))
 
         self.angle = 0
         self.vectRight = pygame.math.Vector2(1, 0)
@@ -77,6 +80,7 @@ class AI(Actor):
 
         self.destination = pygame.math.Vector2(self.midPos)
         self.otherDestination = []
+        self.posDuringRoute = []
         self.finalDestination = pygame.math.Vector2(self.midPos)
         self.isMoving = False
 
@@ -92,8 +96,6 @@ class AI(Actor):
         self.distMoveWander = 300
         self.wanderSet = False
         self.distFlee = 300
-
-        self.dirTurn = ""
 
         self.states.append(State("Seek", self.OnSeek, self.OnExit))
         self.states.append(State("Flee", self.OnFlee, self.OnExit))
@@ -126,7 +128,7 @@ class AI(Actor):
         self.finalDestination.x = int(dest[0] / 64) * 64 + 32
         self.finalDestination.y = int(dest[1] / 64) * 64 + 32
         self.otherDestination.clear()
-        self.dirTurn = ""
+        self.posDuringRoute.clear()
 
     def UpdateDest(self, dest:float):
         self.destination.x = int(dest[0] / 64) * 64 + 32
@@ -151,16 +153,17 @@ class AI(Actor):
         #ici j'inverse l'angle car ca me donne l'angle dans l'autre sens
         self.angle = -self.vectRight.angle_to(self.forward)
 
+    #set deux point en avant du personnage pour verifier la collision avec
     def SetForwardPoint(self):
         right = self.forward.rotate(90)
         left = self.forward.rotate(-90)
 
-        self.forwardPoint1 = self.forward * 50
-        self.forwardPoint1 += right * 30
+        self.forwardPoint1 = self.forward * 35
+        self.forwardPoint1 += right * 20
         self.forwardPoint1 += self.midPos
 
-        self.forwardPoint2 = self.forward * 50
-        self.forwardPoint2 += left * 30
+        self.forwardPoint2 = self.forward * 35
+        self.forwardPoint2 += left * 20
         self.forwardPoint2 += self.midPos
 
 
@@ -223,6 +226,7 @@ class AI(Actor):
         if lengthAI >= self.lenghtDest:
             self.isMoving = False
             if self.destination != self.finalDestination:
+                #si il reste des destination a aller avant la final sinon go final
                 if(len(self.otherDestination) > 0):
                     self.UpdateDest(self.otherDestination[0])
                     self.otherDestination.pop(0)
@@ -230,12 +234,20 @@ class AI(Actor):
                     self.UpdateDest(self.finalDestination)
                     #self.dirTurn = ""
                 self.SetTransition("Seek")
+            else:
+                self.posDuringRoute.clear()
         else:
             self.isMoving = True
 
         if self.isMoving:
             self.pos += velo
             self.midPos = self.pos + (self.size / 2)
+
+            oldLocalPos = self.localPos
+            self.localPos = pygame.math.Vector2(int(self.midPos.x / 64), int(self.midPos.y / 64))
+            #ajoute les position dans le tableau de position deja aller
+            if oldLocalPos != self.localPos:
+                self.posDuringRoute.append([oldLocalPos.x, oldLocalPos.y])
 
     def AppleIsEat(self):
         return self.apple.GetState()
@@ -281,12 +293,21 @@ class AI(Actor):
 
             pygame.draw.line(screen, pygame.Color(255, 255, 255), self.midPos, self.destination, 5)
 
-    def GoCelluleDir(self, dir:str, cellulePos):
+    # prend la cellule a gauche ou a droit de elle indiquer selon le player
+    def GoCelluleDir(self, dir:str, cellulePos, timeCall:int):
         self.otherDestination.clear()
+
+        #reset les position deja aller pour eviter quil ce prenne dans un cul de sac
+        if timeCall >= 2:
+            print("test")
+            self.posDuringRoute.clear()
+
 
         localX = int(self.midPos.x / 64)
         localY = int(self.midPos.y / 64)
 
+        #possibiliter de move selon la position de la cellule
+        #celle avec deux position c'est pour eviter certain bug
         rightMove = \
         {
             "-1,-1": [0, -1],
@@ -333,22 +354,45 @@ class AI(Actor):
             gridPosToGo[3] *= 64
             self.otherDestination.append([gridPosToGo[2], gridPosToGo[3]])
 
+        #si il est deja aller a lendroit ou il tourne tourne dans l'autre sens
+        if self.CheckAlreadyPass([int(gridPosToGo[0] / 64), int(gridPosToGo[1] / 64)]):    
+            self.otherDestination.clear()
+            if dir == "right":
+                dir = "left"
+            elif dir == "left":
+                dir = "right"
+            self.GoCelluleDir(dir, cellulePos, timeCall + 1)
+            return       
+
+        #si il a une cellule dans le coin ou il tourne tourne encore pour eviter les bug dans les coin
+        cell = self.mapGame.CheckObstacle([gridPosToGo[0], gridPosToGo[1]])
+        if cell != None:
+            self.GoCelluleDir(dir, cell, timeCall)
+            return
+
         self.UpdateDest([gridPosToGo[0], gridPosToGo[1]])
         self.SetTransition("Seek")
 
+    def CheckAlreadyPass(self, localPos):
+        for pos in self.posDuringRoute:
+            if localPos[0] == pos[0] and localPos[1] == pos[1]:
+                return True
+        return False
+
     def Update(self, dt:float):
         self.SetForwardPoint()
-
+        #fait tourner dans la direction contraire du point qui a rentrer en contacte
         cell = self.mapGame.CheckObstacle([self.forwardPoint1.x, self.forwardPoint1.y])
         if cell != None:
-            if self.dirTurn == "":
-                self.dirTurn = "left"
-            self.GoCelluleDir(self.dirTurn, cell)
-        cell = self.mapGame.CheckObstacle([self.forwardPoint2.x, self.forwardPoint2.y])
-        if cell != None:
-            if self.dirTurn == "":
-                self.dirTurn = "right"
-            self.GoCelluleDir(self.dirTurn, cell)
+            self.pos.x = self.localPos[0] * 64
+            self.pos.y = self.localPos[1] * 64
+            self.GoCelluleDir("left", cell, 0)
+        else:
+            cell = self.mapGame.CheckObstacle([self.forwardPoint2.x, self.forwardPoint2.y])
+            if cell != None:
+                self.pos.x = self.localPos[0] * 64
+                self.pos.y = self.localPos[1] * 64
+                self.GoCelluleDir("right", cell, 0)
 
         match(self.aiState):
             case "Seek":

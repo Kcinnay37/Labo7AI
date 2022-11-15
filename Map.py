@@ -25,6 +25,7 @@ class Map(Actor):
         for o in self.obstacle:
             o.Render(screen)
 
+    #return vrai si un obstacle ce trouve a ce point
     def CheckObstacle(self, point):
         x = int(point[0] / 64)
         y = int(point[1] / 64)
